@@ -8,6 +8,7 @@
 
 ####################################
 
+from __future__ import print_function
 from PyQt4 import QtGui, QtCore
 from functools import partial
 import sys
@@ -152,6 +153,11 @@ endmodule"""
 tag="MPF"
 g.tagDict.update({tag:"Parameter Fit*"})
 
+def _log(*args, **kwargs):
+        if bool(os.environ.get('PFDBG', False)):
+            kwargs.pop('file', None)
+            print('PFDBG:', *args, file=sys.stderr, **kwargs)
+
 def _curve_fit(func, x, y, **kwargs):
     v = scipy.version.short_version.split('.')
     if int(v[1]) <= 16:
@@ -285,11 +291,21 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
             self.modelStackedWidget.addWidget(v)
             self.mechanismModelCombo.addItem(k, v)
 
+        if len(self.IVs) < 1:
+            mechanismTab = self.tabWidget.findChild(QtGui.QWidget, \
+                "mechanismTab")
+            idx = self.tabWidget.indexOf(mechanismTab)
+            if idx > 0:
+                self.tabWidget.setTabEnabled(idx, False)
+
     def exportClicked(self):
         saveCb = partial(f.writeDelimitedData, self.modelData)
         f.saveFuncToFilename(saveCb, title="Save data to...", parent=self)
 
     def IVSpinBoxValueChanged(self, value):
+
+        if len(self.IVs) < 1:
+            return
 
         R0 = self.IVs[value-1]["R0"]
         x = np.array(self.IVs[value-1]["data"][0])
@@ -339,6 +355,9 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         # For the third IV the data are x: self.IVs[2][0] y: self.IVs[2][1]
         # etc.
 
+        if len(self.IVs) < 1:
+            return
+
         xPos = []
         yPos = []
         xNeg = []
@@ -379,7 +398,7 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
             (Spos, Sneg, tp, tn, a0p, a1p, a0n, a1n, sgnPOS, sgnNEG, tw) = self.fit(posRef, negRef, numPoints)
         except RuntimeError:
             self.parameterResultLabel.setText("Convergence error!")
-            print("Could not converge")
+            _log("Could not converge")
         (Rinit, result) = self.response(Spos, Sneg, tp, tn, a0p, a1p, a0n, a1n, sgnPOS, sgnNEG, tw)
 
         self.modelParams["aPos"] = Spos
@@ -575,6 +594,18 @@ class ThreadWrapper(QtCore.QObject):
         super(ThreadWrapper, self).__init__()
         self.deviceList = deviceList
         self.params = params
+        self.experiments = []
+        _log("Adding FormFinder")
+        self.experiments.append({'tag': 'FF', \
+            'func': self._make_partial_formFinder()})
+        if params['run_iv']:
+            _log("Adding CurveTracer")
+            self.experiments.append({'tag': 'CT', \
+                'func': self._make_partial_curveTracer()})
+        if params['run_read']:
+            _log("Adding ReadTrain")
+            self.experiments.append({'tag': 'RET', \
+                'func': self._make_partial_readTrain()})
 
     def run(self):
 
@@ -582,8 +613,6 @@ class ThreadWrapper(QtCore.QObject):
         midTag = "%s_%%s_i" % tag
 
         self.disableInterface.emit(True)
-
-        DBG = bool(os.environ.get('PFDBG', False))
 
         voltages = []
 
@@ -602,31 +631,24 @@ class ThreadWrapper(QtCore.QObject):
             self.highlight.emit(w, b)
 
             for (i, voltage) in enumerate(voltages):
-                # print("Running voltage %d (%d) from %d"  % (i, i+1, len(voltages)))
-                if i == 0:
-                    startTag = "%s_%%s_s" % tag
-                else:
-                    startTag = "%s_%%s_i" % tag
+                _log("Running ParameterFit on %d|%d V = %g" % (w, b, voltage))
+                for (idx, fdecl) in enumerate(self.experiments):
 
-                if i == (len(voltages)-1):
-                    endTag = "%s_%%s_e" % tag
-                else:
-                    endTag = "%s_%%s_i" % tag
+                    midTag = "%s_%%s_i" % tag
 
-                # print("%d: %s %s %s" % (i, startTag, midTag, endTag))
-                if self.params["run_iv"]:
-                    print("Running FF")
-                    self.formFinder(w, b, voltage, self.params["pulse_width"], self.params["interpulse"],
-                            self.params["pulses"], startTag % "FF", midTag % "FF", midTag % "FF")
-                    print("FF finished; Running CT")
-                    self.curveTracer(w, b, self.params["ivstop_pos"], self.params["ivstop_neg"],
-                            self.params["ivstart"], self.params["ivstep"],
-                            self.params["iv_interpulse"], self.params["ivpw"], self.params["ivtype"],
-                            midTag % "CT", midTag % "CT", endTag % "CT")
-                    print("CT finished")
-                else:
-                    self.formFinder(w, b, voltage, self.params["pulse_width"], self.params["interpulse"],
-                            self.params["pulses"], startTag % "FF", midTag % "FF", endTag % "FF")
+                    if idx == 0 and i == 0:
+                        startTag = "%s_%%s_s" % tag
+                    else:
+                        startTag = "%s_%%s_i" % tag
+
+                    if (idx == len(self.experiments)-1) and (i == len(voltages)-1):
+                        endTag = "%s_%%s_e" % tag
+                    else:
+                        endTag = "%s_%%s_i" % tag
+
+                    t = fdecl['tag']
+                    func = fdecl['func']
+                    func(w, b, startTag % t, midTag % t, endTag % t, V=voltage)
 
             self.updateTree.emit(w, b)
 
@@ -634,8 +656,25 @@ class ThreadWrapper(QtCore.QObject):
 
         self.finished.emit()
 
-    def curveTracer(self, w, b, vPos, vNeg, vStart, vStep, interpulse, pwstep, ctType, startTag, midTag, endTag):
-        print("Sending CT data")
+    def _make_partial_curveTracer(self):
+        return partial(self.curveTracer, vPos=self.params['ivstop_pos'], \
+            vNeg=self.params['ivstop_neg'], vStart=self.params['ivstart'], \
+            vStep=self.params['ivstep'], \
+            interpulse=self.params['iv_interpulse'], \
+            pwstep=self.params['ivpw'], ctType=self.params["ivtype"])
+
+    def curveTracer(self, w, b, startTag, midTag, endTag, **kwargs):
+        _log("CurveTracer on %d|%d (%s|%s|%s)" % (w, b, startTag, \
+            midTag, endTag))
+        vStart = kwargs['vStart']
+        vPos = kwargs['vPos']
+        vNeg = kwargs['vNeg']
+        vStep = kwargs['vStep']
+        interpulse = kwargs['interpulse']
+        pwstep = kwargs['pwstep']
+        ctType = kwargs['ctType']
+
+        _log("Sending CT data")
         g.ser.write(str(201) + "\n")
 
         g.ser.write(str(vPos) + "\n")
@@ -645,8 +684,8 @@ class ThreadWrapper(QtCore.QObject):
         g.ser.write(str(pwstep) + "\n")
         g.ser.write(str(interpulse) + "\n")
         time.sleep(0.01)
-        g.ser.write(str(10.1/1000000) + "\n") # CSp
-        g.ser.write(str(-10.1/1000000) + "\n") # CSn
+        g.ser.write(str(0) + "\n") # CSp; no compliance
+        g.ser.write(str(0) + "\n") # CSn; no compliance
         g.ser.write(str(1) + "\n") # single cycle
         g.ser.write(str(ctType) + "\n") # staircase or pulsed
         g.ser.write(str(0) + "\n") # towards V+ always
@@ -661,16 +700,11 @@ class ThreadWrapper(QtCore.QObject):
         buffer = []
         aTag = ""
         readTag='R'+str(g.readOption)+' V='+str(g.Vread)
-        print("CT data sent")
+        _log("CT data sent")
 
         while(not end):
-            # curValues = []
-
-            # curValues.append(float(g.ser.readline().rstrip()))
-            # curValues.append(float(g.ser.readline().rstrip()))
-            # curValues.append(float(g.ser.readline().rstrip()))
             curValues = list(f.getFloats(3))
-            print(curValues)
+            _log(curValues)
 
             if curValues[0] > 10e9:
                 continue
@@ -698,7 +732,18 @@ class ThreadWrapper(QtCore.QObject):
             aTag = midTag
             self.displayData.emit()
 
-    def formFinder(self, w, b, V, pw, interpulse, nrPulses, startTag, midTag, endTag):
+    def _make_partial_formFinder(self):
+        return partial(self.formFinder, \
+            pw=self.params['pulse_width'], \
+            interpulse=self.params['interpulse'], \
+            nrPulses=self.params['pulses'])
+
+    def formFinder(self, w, b, startTag, midTag, endTag, **kwargs):
+
+        V = kwargs['V']
+        pw = kwargs['pw']
+        interpulse = kwargs['interpulse']
+        nrPulses = kwargs['nrPulses']
 
         g.ser.write(str(14) + "\n") # job number, form finder
 
@@ -728,12 +773,6 @@ class ThreadWrapper(QtCore.QObject):
         aTag = ""
 
         while(not end):
-            # curValues = []
-
-            # curValues.append(float(g.ser.readline().rstrip()))
-            # curValues.append(float(g.ser.readline().rstrip()))
-            # curValues.append(float(g.ser.readline().rstrip()))
-
             curValues = list(f.getFloats(3))
 
             if (curValues[2] < 99e-9) and (curValues[0] > 0.0):
@@ -763,6 +802,35 @@ class ThreadWrapper(QtCore.QObject):
             aTag = midTag
             self.displayData.emit()
 
+    def _make_partial_readTrain(self):
+        return partial(self.readTrain, numReads=self.params["num_reads"], \
+            interpulse=self.params["read_interpulse"])
+
+    def readTrain(self, w, b, startTag, midTag, endTag, **kwargs):
+
+        numReads = kwargs['numReads']
+        interpulse = kwargs['interpulse']
+
+        reads = 0
+        while reads < numReads:
+            g.ser.write("1\n")
+            g.ser.write(str(int(w)) + "\n")
+            g.ser.write(str(int(b)) + "\n")
+
+            value = f.getFloats(1)
+            if reads == 0: # first step
+                curTag = startTag
+            elif reads == (numReads - 1): # last step
+                curTag = endTag
+            else: # any intermediate step
+                curTag = midTag
+
+            reads = reads + 1
+            self.sendData.emit(w, b, value, g.Vread, 0, curTag)
+            self.displayData.emit()
+            if interpulse > 0.0:
+                time.sleep(interpulse)
+
 
 class ParameterFit(Ui_PFParent, QtGui.QWidget):
 
@@ -788,6 +856,7 @@ class ParameterFit(Ui_PFParent, QtGui.QWidget):
         self.applyAllButton.clicked.connect(partial(self.programDevs, self.PROGRAM_ALL))
         self.applyRangeButton.clicked.connect(partial(self.programDevs, self.PROGRAM_RANGE))
         self.noIVCheckBox.stateChanged.connect(self.noIVChecked)
+        self.noReadCheckBox.stateChanged.connect(self.noReadChecked)
 
     def noIVChecked(self, state):
         checked = self.noIVCheckBox.isChecked()
@@ -800,6 +869,11 @@ class ParameterFit(Ui_PFParent, QtGui.QWidget):
         self.IVStopPosEdit.setEnabled(not checked)
         self.IVStopNegEdit.setEnabled(not checked)
 
+    def noReadChecked(self, state):
+        checked = self.noReadCheckBox.isChecked()
+        self.nrReadsSpinBox.setEnabled(not checked)
+        self.readInterpulseEdit.setEnabled(not checked)
+
     def applyValidators(self):
         floatValidator = QtGui.QDoubleValidator()
         intValidator = QtGui.QIntValidator()
@@ -809,6 +883,7 @@ class ParameterFit(Ui_PFParent, QtGui.QWidget):
         self.pulseWidthEdit.setValidator(floatValidator)
         self.interpulseEdit.setValidator(floatValidator)
         self.IVInterpulseEdit.setValidator(floatValidator)
+        self.readInterpulseEdit.setValidator(floatValidator)
         self.VStartPosEdit.setValidator(floatValidator)
         self.VStepPosEdit.setValidator(floatValidator)
         self.VStopPosEdit.setValidator(floatValidator)
@@ -847,6 +922,9 @@ class ParameterFit(Ui_PFParent, QtGui.QWidget):
         result["ivstop_neg"] = np.abs(float(self.IVStopNegEdit.text()))
         result["iv_interpulse"] = np.abs(float(self.IVInterpulseEdit.text()))/1000.0
         result["run_iv"] = (not self.noIVCheckBox.isChecked())
+        result["run_read"] = (not self.noReadCheckBox.isChecked())
+        result["num_reads"] = int(self.nrReadsSpinBox.value())
+        result["read_interpulse"] = np.abs(float(self.readInterpulseEdit.text()))/1000.0
         result["ivpw"] = np.abs(float(self.IVPwEdit.text()))/1000.0
         result["ivtype"] = self.IVTypeCombo.itemData(self.IVTypeCombo.currentIndex()).toInt()[0]
 
