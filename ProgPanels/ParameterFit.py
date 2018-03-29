@@ -154,9 +154,9 @@ tag="MPF"
 g.tagDict.update({tag:"Parameter Fit*"})
 
 def _log(*args, **kwargs):
-        if bool(os.environ.get('PFDBG', False)):
-            kwargs.pop('file', None)
-            print('PFDBG:', *args, file=sys.stderr, **kwargs)
+    if bool(os.environ.get('PFDBG', False)):
+        kwargs.pop('file', None)
+        print('PFDBG:', *args, file=sys.stderr, **kwargs)
 
 def _curve_fit(func, x, y, **kwargs):
     v = scipy.version.short_version.split('.')
