@@ -69,8 +69,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>484</width>
-        <height>395</height>
+        <width>496</width>
+        <height>539</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout">
@@ -89,7 +89,14 @@
           <enum>QFrame::Raised</enum>
          </property>
          <layout class="QGridLayout" name="gridLayout_2">
-          <item row="1" column="4">
+          <item row="3" column="2">
+           <widget class="QLabel" name="label_2">
+            <property name="text">
+             <string>V start (V)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="4">
            <widget class="QLineEdit" name="VStartNegEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -102,48 +109,7 @@
             </property>
            </widget>
           </item>
-          <item row="1" column="2">
-           <widget class="QLabel" name="label_2">
-            <property name="text">
-             <string>V start (V)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="11" column="0">
-           <widget class="QCheckBox" name="noIVCheckBox">
-            <property name="text">
-             <string>No I-V</string>
-            </property>
-           </widget>
-          </item>
-          <item row="9" column="0">
-           <widget class="QLabel" name="label_9">
-            <property name="text">
-             <string>I-V start (V)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="10" column="4">
-           <widget class="QLineEdit" name="IVStopNegEdit">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="text">
-             <string>0.5</string>
-            </property>
-           </widget>
-          </item>
-          <item row="10" column="2">
-           <widget class="QLabel" name="label_11">
-            <property name="text">
-             <string>I-V stop (V)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="9" column="1">
+          <item row="11" column="1">
            <widget class="QLineEdit" name="IVStartEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -156,7 +122,34 @@
             </property>
            </widget>
           </item>
-          <item row="10" column="3">
+          <item row="12" column="4">
+           <widget class="QLineEdit" name="IVStopNegEdit">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>0.5</string>
+            </property>
+           </widget>
+          </item>
+          <item row="11" column="0">
+           <widget class="QLabel" name="label_9">
+            <property name="text">
+             <string>I-V start (V)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="12" column="2">
+           <widget class="QLabel" name="label_11">
+            <property name="text">
+             <string>I-V stop (V)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="12" column="3">
            <widget class="QLineEdit" name="IVStopPosEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -169,21 +162,28 @@
             </property>
            </widget>
           </item>
-          <item row="7" column="0">
-           <widget class="QLabel" name="label_14">
+          <item row="13" column="0">
+           <widget class="QCheckBox" name="noIVCheckBox">
             <property name="text">
-             <string>I-V pulse width (ms)</string>
+             <string>No I-V</string>
             </property>
            </widget>
           </item>
-          <item row="1" column="0">
+          <item row="15" column="0">
+           <widget class="QLabel" name="label_15">
+            <property name="text">
+             <string>Number of Reads</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
            <widget class="QLabel" name="label">
             <property name="text">
              <string>Pulses</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="5" column="1">
            <widget class="QLineEdit" name="interpulseEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -196,7 +196,7 @@
             </property>
            </widget>
           </item>
-          <item row="18" column="0">
+          <item row="20" column="0">
            <spacer name="verticalSpacer">
             <property name="orientation">
              <enum>Qt::Vertical</enum>
@@ -209,7 +209,14 @@
             </property>
            </spacer>
           </item>
-          <item row="1" column="1">
+          <item row="9" column="0">
+           <widget class="QLabel" name="label_14">
+            <property name="text">
+             <string>I-V pulse width (ms)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
            <widget class="QLineEdit" name="nrPulsesEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -222,21 +229,21 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
+          <item row="5" column="0">
            <widget class="QLabel" name="label_8">
             <property name="text">
              <string>Bias Interpulse (ms)</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
+          <item row="4" column="0">
            <widget class="QLabel" name="label_7">
             <property name="text">
              <string>Pulse width (us)</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="4" column="1">
            <widget class="QLineEdit" name="pulseWidthEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -249,7 +256,7 @@
             </property>
            </widget>
           </item>
-          <item row="7" column="1">
+          <item row="9" column="1">
            <widget class="QLineEdit" name="IVPwEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -262,21 +269,21 @@
             </property>
            </widget>
           </item>
-          <item row="10" column="0">
+          <item row="12" column="0">
            <widget class="QLabel" name="label_10">
             <property name="text">
              <string>I-V step (V)</string>
             </property>
            </widget>
           </item>
-          <item row="6" column="0">
+          <item row="8" column="0">
            <widget class="QLabel" name="label_12">
             <property name="text">
              <string>I-V Interpulse (ms)</string>
             </property>
            </widget>
           </item>
-          <item row="6" column="1">
+          <item row="8" column="1">
            <widget class="QLineEdit" name="IVInterpulseEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -289,7 +296,7 @@
             </property>
            </widget>
           </item>
-          <item row="10" column="1">
+          <item row="12" column="1">
            <widget class="QLineEdit" name="IVStepEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -302,14 +309,14 @@
             </property>
            </widget>
           </item>
-          <item row="2" column="2">
+          <item row="4" column="2">
            <widget class="QLabel" name="label_3">
             <property name="text">
              <string>V step (V)</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="3">
+          <item row="4" column="3">
            <widget class="QLineEdit" name="VStepPosEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -322,7 +329,7 @@
             </property>
            </widget>
           </item>
-          <item row="1" column="3">
+          <item row="3" column="3">
            <widget class="QLineEdit" name="VStartPosEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -335,14 +342,14 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="2">
+          <item row="5" column="2">
            <widget class="QLabel" name="label_4">
             <property name="text">
              <string>V stop (V)</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="4">
+          <item row="5" column="4">
            <widget class="QLineEdit" name="VStopNegEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -355,7 +362,7 @@
             </property>
            </widget>
           </item>
-          <item row="2" column="4">
+          <item row="4" column="4">
            <widget class="QLineEdit" name="VStepNegEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -368,7 +375,7 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="3">
+          <item row="5" column="3">
            <widget class="QLineEdit" name="VStopPosEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -381,7 +388,7 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="3">
+          <item row="2" column="3">
            <widget class="QLabel" name="label_5">
             <property name="styleSheet">
              <string notr="true">font-weight:bold;</string>
@@ -394,7 +401,7 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="4">
+          <item row="2" column="4">
            <widget class="QLabel" name="label_6">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
@@ -413,7 +420,7 @@
             </property>
            </widget>
           </item>
-          <item row="2" column="5">
+          <item row="4" column="5">
            <spacer name="horizontalSpacer">
             <property name="orientation">
              <enum>Qt::Horizontal</enum>
@@ -426,14 +433,7 @@
             </property>
            </spacer>
           </item>
-          <item row="13" column="0">
-           <widget class="QLabel" name="label_15">
-            <property name="text">
-             <string>Number of Reads</string>
-            </property>
-           </widget>
-          </item>
-          <item row="12" column="0" colspan="5">
+          <item row="14" column="0" colspan="5">
            <widget class="QFrame" name="frame_3">
             <property name="enabled">
              <bool>false</bool>
@@ -446,7 +446,7 @@
             </property>
            </widget>
           </item>
-          <item row="13" column="1">
+          <item row="15" column="1">
            <widget class="QSpinBox" name="nrReadsSpinBox">
             <property name="minimum">
              <number>1</number>
@@ -459,17 +459,17 @@
             </property>
            </widget>
           </item>
-          <item row="5" column="0">
+          <item row="7" column="0">
            <widget class="QLabel" name="label_13">
             <property name="text">
              <string>I-V Type</string>
             </property>
            </widget>
           </item>
-          <item row="5" column="1">
+          <item row="7" column="1">
            <widget class="QComboBox" name="IVTypeCombo"/>
           </item>
-          <item row="4" column="0" colspan="5">
+          <item row="6" column="0" colspan="5">
            <widget class="QFrame" name="frame_2">
             <property name="enabled">
              <bool>false</bool>
@@ -482,24 +482,51 @@
             </property>
            </widget>
           </item>
-          <item row="14" column="1">
+          <item row="16" column="1">
            <widget class="QLineEdit" name="readInterpulseEdit">
             <property name="text">
              <string>1</string>
             </property>
            </widget>
           </item>
-          <item row="14" column="0">
+          <item row="16" column="0">
            <widget class="QLabel" name="label_16">
             <property name="text">
              <string>Interpulse (ms)</string>
             </property>
            </widget>
           </item>
-          <item row="17" column="0">
+          <item row="19" column="0">
            <widget class="QCheckBox" name="noReadCheckBox">
             <property name="text">
              <string>No read train</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0" colspan="5">
+           <widget class="QFrame" name="frame_4">
+            <property name="frameShape">
+             <enum>QFrame::HLine</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_17">
+            <property name="text">
+             <string>Cycles</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QSpinBox" name="cyclesSpinBox">
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>9999</number>
             </property>
            </widget>
           </item>

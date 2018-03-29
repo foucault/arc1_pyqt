@@ -623,32 +623,46 @@ class ThreadWrapper(QtCore.QObject):
         for i in range(numVoltages):
             voltages.append(vpos[i])
             voltages.append(vneg[i])
-        # print(voltages)
 
+        # Main routine. For each of the calculated voltage pairs run N
+        # repetitions of (up to) three characterisation routines, in sequence
+        # 1) FormFinder: A series of fixed voltage programming pulses
+        # 2) I-V: A pulsed I-V, usually up to the read voltage
+        # 3) ReadTrain: A train of read pulses
+        # 1 is always run as it is necessary to extract the parametric model.
+        # The other two routines are optional and used to extract some
+        # information on the conduction mechanism and do some statistics for
+        # noise evaluation.
         for device in self.deviceList:
             w = device[0]
             b = device[1]
             self.highlight.emit(w, b)
 
             for (i, voltage) in enumerate(voltages):
-                _log("Running ParameterFit on %d|%d V = %g" % (w, b, voltage))
-                for (idx, fdecl) in enumerate(self.experiments):
+                for cycle in range(self.params["cycles"]):
+                    _log("Running ParameterFit (C %d/%d) on (%d|%d) V = %g" % \
+                        (cycle, self.params["cycles"], w, b, voltage))
+                    for (idx, fdecl) in enumerate(self.experiments):
 
-                    midTag = "%s_%%s_i" % tag
+                        midTag = "%s_%%s_i" % tag
 
-                    if idx == 0 and i == 0:
-                        startTag = "%s_%%s_s" % tag
-                    else:
-                        startTag = "%s_%%s_i" % tag
+                        # Check if this is the first reading to set the
+                        # appropriate tag
+                        if idx == 0 and i == 0:
+                            startTag = "%s_%%s_s" % tag
+                        else:
+                            startTag = "%s_%%s_i" % tag
 
-                    if (idx == len(self.experiments)-1) and (i == len(voltages)-1):
-                        endTag = "%s_%%s_e" % tag
-                    else:
-                        endTag = "%s_%%s_i" % tag
+                        # Check if this is the last reading to set the
+                        # appropriate tag
+                        if (idx == len(self.experiments)-1) and (i == len(voltages)-1):
+                            endTag = "%s_%%s_e" % tag
+                        else:
+                            endTag = "%s_%%s_i" % tag
 
-                    t = fdecl['tag']
-                    func = fdecl['func']
-                    func(w, b, startTag % t, midTag % t, endTag % t, V=voltage)
+                        t = fdecl['tag']
+                        func = fdecl['func']
+                        func(w, b, startTag % t, midTag % t, endTag % t, V=voltage)
 
             self.updateTree.emit(w, b)
 
@@ -907,6 +921,7 @@ class ParameterFit(Ui_PFParent, QtGui.QWidget):
     def gatherData(self):
         result = {}
 
+        result["cycles"] = int(self.cyclesSpinBox.value())
         result["pulses"] = int(self.nrPulsesEdit.text())
         result["pulse_width"] = float(self.pulseWidthEdit.text())/1.0e6
         result["interpulse"] = float(self.interpulseEdit.text())/1.0e3
