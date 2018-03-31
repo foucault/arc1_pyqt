@@ -621,8 +621,10 @@ class ThreadWrapper(QtCore.QObject):
 
         numVoltages = min(len(vpos), len(vneg))
         for i in range(numVoltages):
-            voltages.append(vpos[i])
-            voltages.append(vneg[i])
+            # Repeat the voltage pairs self.params["cycles"] times
+            for _ in range(self.params["cycles"]):
+                voltages.append(vpos[i])
+                voltages.append(vneg[i])
 
         # Main routine. For each of the calculated voltage pairs run N
         # repetitions of (up to) three characterisation routines, in sequence
@@ -639,30 +641,30 @@ class ThreadWrapper(QtCore.QObject):
             self.highlight.emit(w, b)
 
             for (i, voltage) in enumerate(voltages):
-                for cycle in range(self.params["cycles"]):
-                    _log("Running ParameterFit (C %d/%d) on (%d|%d) V = %g" % \
-                        (cycle, self.params["cycles"], w, b, voltage))
-                    for (idx, fdecl) in enumerate(self.experiments):
+                cycle = np.floor((i%(self.params["cycles"]*2))/2) + 1
+                _log("Running ParameterFit (C %d/%d) on (%d|%d) V = %g" % \
+                    (cycle, self.params["cycles"], w, b, voltage))
+                for (idx, fdecl) in enumerate(self.experiments):
 
-                        midTag = "%s_%%s_i" % tag
+                    midTag = "%s_%%s_i" % tag
 
-                        # Check if this is the first reading to set the
-                        # appropriate tag
-                        if idx == 0 and i == 0:
-                            startTag = "%s_%%s_s" % tag
-                        else:
-                            startTag = "%s_%%s_i" % tag
+                    # Check if this is the first reading to set the
+                    # appropriate tag
+                    if idx == 0 and i == 0:
+                        startTag = "%s_%%s_s" % tag
+                    else:
+                        startTag = "%s_%%s_i" % tag
 
-                        # Check if this is the last reading to set the
-                        # appropriate tag
-                        if (idx == len(self.experiments)-1) and (i == len(voltages)-1):
-                            endTag = "%s_%%s_e" % tag
-                        else:
-                            endTag = "%s_%%s_i" % tag
+                    # Check if this is the last reading to set the
+                    # appropriate tag
+                    if (idx == len(self.experiments)-1) and (i == len(voltages)-1):
+                        endTag = "%s_%%s_e" % tag
+                    else:
+                        endTag = "%s_%%s_i" % tag
 
-                        t = fdecl['tag']
-                        func = fdecl['func']
-                        func(w, b, startTag % t, midTag % t, endTag % t, V=voltage)
+                    t = fdecl['tag']
+                    func = fdecl['func']
+                    func(w, b, startTag % t, midTag % t, endTag % t, V=voltage)
 
             self.updateTree.emit(w, b)
 
