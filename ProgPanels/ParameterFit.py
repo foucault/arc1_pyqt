@@ -598,14 +598,14 @@ class ThreadWrapper(QtCore.QObject):
         _log("Adding FormFinder")
         self.experiments.append({'tag': 'FF', \
             'func': self._make_partial_formFinder()})
-        if params['run_iv']:
-            _log("Adding CurveTracer")
-            self.experiments.append({'tag': 'CT', \
-                'func': self._make_partial_curveTracer()})
         if params['run_read']:
             _log("Adding ReadTrain")
             self.experiments.append({'tag': 'RET', \
                 'func': self._make_partial_readTrain()})
+        if params['run_iv']:
+            _log("Adding CurveTracer")
+            self.experiments.append({'tag': 'CT', \
+                'func': self._make_partial_curveTracer()})
 
     def run(self):
 
