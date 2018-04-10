@@ -20,6 +20,7 @@ import scipy.version
 from scipy.optimize import curve_fit, leastsq, least_squares
 import pyqtgraph
 import copy
+import re
 
 import Globals.GlobalFonts as fonts
 import Globals.GlobalFunctions as f
@@ -224,6 +225,9 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         self.fitMechanismModelButton.clicked.connect(self.fitMechanismClicked)
         self.mechanismModelCombo.currentIndexChanged.connect(self.mechanismModelComboIndexChanged)
 
+        self.totalCycles = 1
+        self.pulsesPerCycle = 500
+
         self.resistances[:] = []
         self.voltages[:] = []
         self.pulses[:] = []
@@ -234,30 +238,45 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         unique_pos_voltages = set()
         unique_neg_voltages = set()
 
-        in_ff = True
+        activeTag = ""
         currentIV = { "R0": -1.0, "data": [[],[]] }
 
         for line in raw_data:
-            if str(line[3]).split("_")[1] == 'FF':
-                in_ff = True
-                self.resistances.append(line[0])
-                self.voltages.append(line[1])
-                if line[1] >= 0:
-                    unique_pos_voltages.add(line[1])
+
+            res = float(line[0])
+            bias = float(line[1])
+            pw = float(line[2])
+            t = str(line[3]).split("_")[1]
+            vread = float(line[5])
+
+            if t == 'INIT':
+                match = re.match('%s_INIT_C(\d+)_P(\d+)_s' % tag, str(line[3]))
+                if match:
+                    self.totalCycles = int(match.group(1))
+                    self.pulsesPerCycle = int(match.group(2))
+                    self.numPulsesEdit.setText(str(self.pulsesPerCycle))
+                    self.numPulsesEdit.setEnabled(False)
+            elif t == 'FF':
+                self.resistances.append(res)
+                self.voltages.append(bias)
+                if bias >= 0:
+                    unique_pos_voltages.add(bias)
                 else:
-                    unique_neg_voltages.add(line[1])
-                self.pulses.append(line[2])
-            else:
-                if in_ff:
+                    unique_neg_voltages.add(bias)
+                self.pulses.append(pw)
+            elif t == 'CT':
+                if activeTag != t: # first point of new curve tracer
                     if len(currentIV["data"][0]) > 0 and len(currentIV["data"][1]) > 0:
                         self.IVs.append(currentIV)
                     currentIV = { "R0": self.resistances[-1], "data": [[],[]] }
-                in_ff = False
 
-                voltage = float(line[5])
-                current = float(line[5])/float(line[0])
-                currentIV["data"][0].append(voltage)
+                current = vread/res
+                currentIV["data"][0].append(vread)
                 currentIV["data"][1].append(current)
+            else:
+                pass
+
+            activeTag = t
 
         self.resistancePlot = self.responsePlotWidget.plot(self.resistances, clear=True,
             pen=pyqtgraph.mkPen({'color': 'F00', 'width': 1}))
@@ -640,6 +659,16 @@ class ThreadWrapper(QtCore.QObject):
             b = device[1]
             self.highlight.emit(w, b)
 
+            # This is the initialisation tag constructed as such
+            # MPF_INIT_CX_PY_s where
+            # X: Number of cycles
+            # Y: Number of pulses per cycle
+            initTag = "%s_INIT_C%d_P%d_s" % \
+                (tag, self.params["cycles"], self.params["pulses"])
+            initVal = self._readSingle(w, b)
+            self.sendData.emit(w, b, initVal, g.Vread, 0, initTag)
+            self.displayData.emit()
+
             for (i, voltage) in enumerate(voltages):
                 cycle = np.floor((i%(self.params["cycles"]*2))/2) + 1
                 _log("Running ParameterFit (C %d/%d) on (%d|%d) V = %g" % \
@@ -648,12 +677,9 @@ class ThreadWrapper(QtCore.QObject):
 
                     midTag = "%s_%%s_i" % tag
 
-                    # Check if this is the first reading to set the
-                    # appropriate tag
-                    if idx == 0 and i == 0:
-                        startTag = "%s_%%s_s" % tag
-                    else:
-                        startTag = "%s_%%s_i" % tag
+                    # Since the single init read is always the first data point the
+                    # start tag can only be intermediate (_i)
+                    startTag = "%s_%%s_i" % tag
 
                     # Check if this is the last reading to set the
                     # appropriate tag
@@ -829,11 +855,9 @@ class ThreadWrapper(QtCore.QObject):
 
         reads = 0
         while reads < numReads:
-            g.ser.write("1\n")
-            g.ser.write(str(int(w)) + "\n")
-            g.ser.write(str(int(b)) + "\n")
 
-            value = f.getFloats(1)
+            value = self._readSingle(w, b)
+
             if reads == 0: # first step
                 curTag = startTag
             elif reads == (numReads - 1): # last step
@@ -846,6 +870,15 @@ class ThreadWrapper(QtCore.QObject):
             self.displayData.emit()
             if interpulse > 0.0:
                 time.sleep(interpulse)
+
+    def _readSingle(self, w, b):
+        g.ser.write("1\n")
+        g.ser.write(str(int(w)) + "\n")
+        g.ser.write(str(int(b)) + "\n")
+
+        value = f.getFloats(1)
+
+        return value
 
 
 class ParameterFit(Ui_PFParent, QtGui.QWidget):
