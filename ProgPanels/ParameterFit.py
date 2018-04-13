@@ -716,7 +716,6 @@ class ThreadWrapper(QtCore.QObject):
         pwstep = kwargs['pwstep']
         ctType = kwargs['ctType']
 
-        _log("Sending CT data")
         g.ser.write(str(201) + "\n")
 
         g.ser.write(str(vPos) + "\n")
@@ -742,11 +741,9 @@ class ThreadWrapper(QtCore.QObject):
         buffer = []
         aTag = ""
         readTag='R'+str(g.readOption)+' V='+str(g.Vread)
-        _log("CT data sent")
 
         while(not end):
             curValues = list(f.getFloats(3))
-            _log(curValues)
 
             if curValues[0] > 10e9:
                 continue
@@ -764,8 +761,6 @@ class ThreadWrapper(QtCore.QObject):
                     aTag = startTag
                     continue
 
-            #data.append(buffer)
-            #print(buffer[0], buffer[1], buffer[2], aTag)
             # flush buffer values
             self.sendDataCT.emit(w, b, buffer[0], buffer[1], buffer[2], aTag)
             buffer[0] = curValues[0]
