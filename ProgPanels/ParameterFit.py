@@ -294,9 +294,9 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         self.IVSpinBoxValueChanged(1)
 
         for v in sorted(unique_pos_voltages):
-            self.refPosCombo.addItem(str(v), v)
+            self.refPosCombo.addItem("%.2f" % v, v)
         for v in sorted(unique_neg_voltages, reverse=True):
-            self.refNegCombo.addItem(str(v), v)
+            self.refNegCombo.addItem("%.2f" % v, v)
 
         self.modelWidgets = {}
 
