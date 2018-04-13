@@ -250,7 +250,7 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
             vread = float(line[5])
 
             if t == 'INIT':
-                match = re.match('%s_INIT_C(\d+)_P(\d+)_s' % tag, str(line[3]))
+                match = re.match('%s_INIT_C(\d+)_P(\d+)_NV(\d+)_s' % tag, str(line[3]))
                 if match:
                     self.totalCycles = int(match.group(1))
                     self.pulsesPerCycle = int(match.group(2))
@@ -660,11 +660,12 @@ class ThreadWrapper(QtCore.QObject):
             self.highlight.emit(w, b)
 
             # This is the initialisation tag constructed as such
-            # MPF_INIT_CX_PY_s where
-            # X: Number of cycles
-            # Y: Number of pulses per cycle
-            initTag = "%s_INIT_C%d_P%d_s" % \
-                (tag, self.params["cycles"], self.params["pulses"])
+            # MPF_INIT_Cx_Py_NVz_s where
+            # x: Number of cycles
+            # y: Number of pulses per cycle
+            # z: Number of different voltage pairs
+            initTag = "%s_INIT_C%d_P%d_NV%d_s" % \
+                (tag, self.params["cycles"], self.params["pulses"], numVoltages)
             initVal = self._readSingle(w, b)
             self.sendData.emit(w, b, initVal, g.Vread, 0, initTag)
             self.displayData.emit()
