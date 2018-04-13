@@ -166,6 +166,7 @@ def _curve_fit(func, x, y, **kwargs):
             kwargs.pop('method')
     return curve_fit(func, x, y, **kwargs)
 
+
 class ModelWidget(QtGui.QWidget):
 
     def __init__(self, parameters, func, expression="", parent=None):
@@ -227,10 +228,12 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
 
         self.totalCycles = 1
         self.pulsesPerCycle = 500
+        self.numVoltages = 1
 
-        self.resistances[:] = []
-        self.voltages[:] = []
-        self.pulses[:] = []
+        pointsPerCycle = self.numVoltages*self.pulsesPerCycle*2
+        self.all_resistances = np.ndarray((self.totalCycles, pointsPerCycle))
+        self.all_voltages = np.ndarray((self.totalCycles, pointsPerCycle))
+        self.all_pulses = np.ndarray((self.totalCycles, pointsPerCycle))
         self.modelData[:] = []
         self.modelParams = {}
         self.IVs = []
@@ -240,6 +243,10 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
 
         activeTag = ""
         currentIV = { "R0": -1.0, "data": [[],[]] }
+
+        cycleIdx = 0 # The cycle we're currently processing
+        voltIdx = 0 # The index of the voltage pair we're currently processing
+        lineIdx = 0 # the index of the current line (only for the resistances)
 
         for line in raw_data:
 
@@ -254,21 +261,61 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
                 if match:
                     self.totalCycles = int(match.group(1))
                     self.pulsesPerCycle = int(match.group(2))
+                    self.numVoltages = int(match.group(3))
+                    pointsPerCycle = self.numVoltages*self.pulsesPerCycle*2
+                    self.all_resistances = np.ndarray((self.totalCycles, \
+                        pointsPerCycle))
+                    self.all_voltages = np.ndarray((self.totalCycles, \
+                        pointsPerCycle))
+                    self.all_pulses = np.ndarray((self.totalCycles, \
+                        pointsPerCycle))
                     self.numPulsesEdit.setText(str(self.pulsesPerCycle))
                     self.numPulsesEdit.setEnabled(False)
             elif t == 'FF':
-                self.resistances.append(res)
-                self.voltages.append(bias)
+                # Store the data
+                self.all_resistances[cycleIdx][lineIdx] = res
+                self.all_voltages[cycleIdx][lineIdx] = bias
+                self.all_pulses[cycleIdx][lineIdx] = pw
+
+                # First check if this is the final point of a single pair
+                # of voltages. Since self.pulsesPerCycle is for a single
+                # voltage we need to double it to account for the pair
+                if lineIdx == (2*(voltIdx+1)*self.pulsesPerCycle - 1):
+                    # Then check if this is the last cycle for this voltage
+                    if cycleIdx == (self.totalCycles - 1):
+                        # If yes move on to the next voltage and reset
+                        # the cycle counter (we are moving on to the first
+                        # cycle of the next voltage pair)
+                        voltIdx += 1
+                        cycleIdx = 0
+                    else:
+                        # otherwise it means this voltage pair is not fully
+                        # processed yet; in that case move on to the next cycle
+                        # of the current voltage pair
+                        cycleIdx += 1
+
+                    # In any case set the line counter to the correct line
+                    # number; voltIdx is increased only when all the cycles
+                    # of a single voltage pair have been processed, otherwise
+                    # it will be the same
+                    lineIdx = 2*voltIdx*self.pulsesPerCycle
+                else:
+                    # if not just move to the next point
+                    lineIdx += 1
+
                 if bias >= 0:
                     unique_pos_voltages.add(bias)
                 else:
                     unique_neg_voltages.add(bias)
-                self.pulses.append(pw)
+
             elif t == 'CT':
-                if activeTag != t: # first point of new curve tracer
+                # check if this is the first point of new curve tracer
+                if activeTag != t:
                     if len(currentIV["data"][0]) > 0 and len(currentIV["data"][1]) > 0:
                         self.IVs.append(currentIV)
-                    currentIV = { "R0": self.resistances[-1], "data": [[],[]] }
+                    currentIV = { \
+                        "R0": self.all_resistances[cycleIdx][-1], \
+                        "data": [[],[]] }
 
                 current = vread/res
                 currentIV["data"][0].append(vread)
@@ -278,8 +325,15 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
 
             activeTag = t
 
-        self.resistancePlot = self.responsePlotWidget.plot(self.resistances, clear=True,
-            pen=pyqtgraph.mkPen({'color': 'F00', 'width': 1}))
+        # average resistances, voltages and pulses across all cycles
+        # voltages and pulses should be the same as they are identical
+        # within the same cycle
+        self.resistances = np.average(self.all_resistances, 0)
+        self.voltages = np.average(self.all_voltages, 0)
+        self.pulses = np.average(self.all_pulses, 0)
+
+        self.resistancePlot = self.responsePlotWidget.plot(self.resistances,\
+            clear=True, pen=pyqtgraph.mkPen({'color': 'F00', 'width': 1}))
 
         self.fitPlot = None
 
@@ -479,9 +533,9 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         #R = np.array(self.resistances[1:])
         #V = np.array(self.voltages[1:])
         #t = np.array(self.pulses[1:])
-        R = np.array(self.resistances[:])
-        V = np.array(self.voltages[:])
-        t = np.array(self.pulses[:])
+        R = self.resistances
+        V = self.voltages
+        t = self.pulses
 
         time = np.arange(t[0], (numPoints+1)*t[0], t[0])
         time = time[:numPoints]
@@ -678,8 +732,8 @@ class ThreadWrapper(QtCore.QObject):
 
                     midTag = "%s_%%s_i" % tag
 
-                    # Since the single init read is always the first data point the
-                    # start tag can only be intermediate (_i)
+                    # Since the single init read is always the first data point
+                    # the start tag can only be intermediate (_i)
                     startTag = "%s_%%s_i" % tag
 
                     # Check if this is the last reading to set the
