@@ -777,6 +777,9 @@ class ThreadWrapper(QtCore.QObject):
 
     def formFinder(self, w, b, startTag, midTag, endTag, **kwargs):
 
+        _log("FormFinder on %d|%d (%s|%s|%s)" % (w, b, startTag, \
+            midTag, endTag))
+
         V = kwargs['V']
         pw = kwargs['pw']
         interpulse = kwargs['interpulse']
@@ -844,6 +847,9 @@ class ThreadWrapper(QtCore.QObject):
             interpulse=self.params["read_interpulse"])
 
     def readTrain(self, w, b, startTag, midTag, endTag, **kwargs):
+
+        _log("Read Train on %d|%d (%s|%s|%s)" % (w, b, startTag, \
+            midTag, endTag))
 
         numReads = kwargs['numReads']
         interpulse = kwargs['interpulse']
