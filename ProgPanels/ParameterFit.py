@@ -154,6 +154,9 @@ endmodule"""
 tag="MPF"
 g.tagDict.update({tag:"Parameter Fit*"})
 
+if os.environ.get('PFDBG', False):
+    np.set_printoptions(threshold=np.nan)
+
 def _log(*args, **kwargs):
     if bool(os.environ.get('PFDBG', False)):
         kwargs.pop('file', None)
