@@ -380,23 +380,42 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         if len(self.IVs) < 1:
             return
 
+        # plot all data points, but highlight the current one
+        self.mechanismPlotWidget.clear()
+        for idx in range(len(self.IVs)):
+            x = np.array(self.IVs[idx-1]["data"][0])
+            y = np.array(self.IVs[idx-1]["data"][1])
+            # Do not plot the selected index, we want it to stand out
+            if value != idx-1:
+                color = '#AAAAAA'
+                self.mechanismPlotWidget.plot(x, y, pen=None, \
+                    symbolBrush=color, symbolPen=color, symbol='o', \
+                    symbolSize=5)
+
+        # Get the values of the selected curve
         R0 = self.IVs[value-1]["R0"]
         x = np.array(self.IVs[value-1]["data"][0])
         y = np.array(self.IVs[value-1]["data"][1])
 
-        self.mechanismPlotWidget.plot(x,y, clear=True, pen=None, symbol='o', symbolSize=5)
+        # Now plot it on top of the other (so that it stands out)
+        color = 'r'
+        self.mechanismPlotWidget.plot(x, y, pen=None, \
+            symbolBrush=color, symbolPen=color, symbol='o', \
+            symbolSize=5)
 
         if self.mechanismParams['pos'] is not None:
             p0 = self.mechanismParams['pos'][0]
             p1 = self.mechanismParams['pos'][1]
             lxPos = np.linspace(np.min(x[x > 0]), np.max(x[x > 0]))
-            self.mechanismPlotWidget.plot(lxPos, p0*np.sinh(lxPos*p1)/R0)
+            self.mechanismPlotWidget.plot(lxPos, p0*np.sinh(lxPos*p1)/R0, \
+                pen='b')
 
         if self.mechanismParams['neg'] is not None:
             p0 = self.mechanismParams['neg'][0]
             p1 = self.mechanismParams['neg'][1]
             lxNeg = np.linspace(np.min(x[x < 0]), np.max(x[x < 0]))
-            self.mechanismPlotWidget.plot(lxNeg, p0*np.sinh(lxNeg*p1)/R0)
+            self.mechanismPlotWidget.plot(lxNeg, p0*np.sinh(lxNeg*p1)/R0, \
+                pen='b')
 
     def exportVerilogClicked(self):
         aPos = self.modelParams["aPos"]
