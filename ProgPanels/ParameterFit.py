@@ -233,7 +233,7 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         self.pulsesPerCycle = 500
         self.numVoltages = 2
 
-        pointsPerCycle = self.numVoltages*self.pulsesPerCycle*2
+        pointsPerCycle = self.numVoltages*self.pulsesPerCycle
         self.all_resistances = np.ndarray((self.totalCycles, pointsPerCycle))
         self.all_voltages = np.ndarray((self.totalCycles, pointsPerCycle))
         self.all_pulses = np.ndarray((self.totalCycles, pointsPerCycle))
@@ -247,25 +247,37 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         activeTag = ""
         currentIV = { "R0": -1.0, "data": [[],[]] }
 
-        cycleIdx = 0 # The cycle we're currently processing
-        voltIdx = 0 # The index of the voltage pair we're currently processing
-        lineIdx = 0 # the index of the current line (only for the resistances)
+        # currently processed and previous values; as the FF blocks are the
+        # only guaranteed to exist we need to update the values only during
+        # an FF block. However CT (and probably RET) blocks need to know the
+        # previous values of cycle and voltage. So we keep the previous value
+        # in array that will be np.roll-ed every time any of the indices is
+        # updated. Previous value is the [0] value, so the newest one is always
+        # the last one [-1].
+        cycleIdx = np.array([0, 0])
+        voltIdx = np.array([0, 0])
+
+        # no need to keep previous line index; this is only useful for FF
+        lineIdx = 0
 
         for line in raw_data:
 
             res = float(line[0])
             bias = float(line[1])
             pw = float(line[2])
+            # the subtag part of the tag (brackets for emphasis only)
+            # eg. MPF_[FF]_Cx_Py_NVz_i; subtag is FF
             t = str(line[3]).split("_")[1]
             vread = float(line[5])
 
             if t == 'INIT':
-                match = re.match('%s_INIT_C(\d+)_P(\d+)_NV(\d+)_s' % tag, str(line[3]))
+                match = re.match('%s_INIT_C(\d+)_P(\d+)_NV(\d+)_s' % tag,\
+                    str(line[3]))
                 if match:
                     self.totalCycles = int(match.group(1))
                     self.pulsesPerCycle = int(match.group(2))
-                    self.numVoltages = int(match.group(3))
-                    pointsPerCycle = self.numVoltages*self.pulsesPerCycle*2
+                    self.numVoltages = int(match.group(3))*2
+                    pointsPerCycle = self.numVoltages*self.pulsesPerCycle
                     self.all_resistances = np.ndarray((self.totalCycles, \
                         pointsPerCycle))
                     self.all_voltages = np.ndarray((self.totalCycles, \
@@ -274,50 +286,112 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
                         pointsPerCycle))
                     self.numPulsesEdit.setText(str(self.pulsesPerCycle))
                     self.numPulsesEdit.setEnabled(False)
+
             elif t == 'FF':
-                # Store the data
-                self.all_resistances[cycleIdx][lineIdx] = res
-                self.all_voltages[cycleIdx][lineIdx] = bias
-                self.all_pulses[cycleIdx][lineIdx] = pw
-
-                # First check if this is the final point of a single pair
-                # of voltages. Since self.pulsesPerCycle is for a single
-                # voltage we need to double it to account for the pair
-                if lineIdx == (2*(voltIdx+1)*self.pulsesPerCycle - 1):
-                    # Then check if this is the last cycle for this voltage
-                    if cycleIdx == (self.totalCycles - 1):
-                        # If yes move on to the next voltage and reset
-                        # the cycle counter (we are moving on to the first
-                        # cycle of the next voltage pair)
-                        voltIdx += 1
-                        cycleIdx = 0
-                    else:
-                        # otherwise it means this voltage pair is not fully
-                        # processed yet; in that case move on to the next cycle
-                        # of the current voltage pair
-                        cycleIdx += 1
-
-                    # In any case set the line counter to the correct line
-                    # number; voltIdx is increased only when all the cycles
-                    # of a single voltage pair have been processed, otherwise
-                    # it will be the same
-                    lineIdx = 2*voltIdx*self.pulsesPerCycle
-                else:
-                    # if not just move to the next point
-                    lineIdx += 1
+                # Store the data using the indices calculated from the previous
+                # run...
+                self.all_resistances[cycleIdx[-1]][lineIdx] = res
+                self.all_voltages[cycleIdx[-1]][lineIdx] = bias
+                self.all_pulses[cycleIdx[-1]][lineIdx] = pw
 
                 if bias >= 0:
                     unique_pos_voltages.add(bias)
                 else:
                     unique_neg_voltages.add(bias)
 
+                # ...and decide what we do next. OK, so this is a bit
+                # complicated since we need to account for all cycles of the
+                # measurement and a series of subtags that are optional: CT and
+                # RET. So pay attention! Since only the FF part is mandatory
+                # all decisions on how to move within the data array must be
+                # made when processing the FF block (otherwise they might not
+                # be made at all). The FF block alway precedes all others so it
+                # is used to calculate where to write the next value. Remember
+                # cycles are represented as separate columns (or rows depending
+                # on how you want to represent them) in the all_resistances
+                # array.
+
+                # First, check the voltage the next line is in (hence the +1)
+                multiple = np.floor((lineIdx+1)/self.pulsesPerCycle)
+
+                # If it is an integer multiple of pulsesPerCycle (which means
+                # that all points of the current voltage have been processed)
+                # and this multiple is > 0 (if 0 then it is essentially the
+                # first point- so nothing useful to do)...
+                if (lineIdx+1) % self.pulsesPerCycle == 0 and multiple > 0:
+                    if multiple % 2 != 0:
+                        # Since voltages come in pairs check if this is the
+                        # first voltage of the pair (the even one)...
+
+                        # voltage ended but cycle did not; just increase the
+                        # voltage idx and keep the current cycle index the same
+                        # as the previous one. cycleIdx must be rolled because
+                        # otherwise during the processing of CT blocks the
+                        # cycle order will be thrown out of order (*)
+                        cycleIdx = np.roll(cycleIdx, 1)
+                        cycleIdx[-1] = cycleIdx[0]
+                        voltIdx = np.roll(voltIdx, 1)
+                        voltIdx[-1] = voltIdx[0] + 1
+                    else:
+                        # ...or the second (the odd one; remember we count
+                        # starting from 0)
+
+                        if cycleIdx[-1] == (self.totalCycles - 1):
+                            # First check which cycle are we on. In this case
+                            # voltage and cycle ended; need to check cycleIdx
+                            # if it's the last cycle the reset the cycle
+                            # counter and increase the voltage counter
+                            cycleIdx = np.roll(cycleIdx, 1)
+                            cycleIdx[-1] = 0
+                            voltIdx = np.roll(voltIdx, 1)
+                            voltIdx[-1] = voltIdx[0] + 1
+                        else:
+                            # this is not the last cycle, so the next incoming
+                            # point will be the first of the next cycle. As we
+                            # are processing voltages in pairs the voltage idx
+                            # must point to the previous one. It will be
+                            # increased once again on the next odd multiple or
+                            # when all voltages of this cycle are expended
+                            voltIdx = np.roll(voltIdx, 1)
+                            voltIdx[-1] = voltIdx[0] - 1
+                            cycleIdx = np.roll(cycleIdx, 1)
+                            cycleIdx[-1] = cycleIdx[0] + 1
+
+                    # in any case the line index should be updated to point
+                    # to the first row of the next voltage; whether it is part
+                    # of this cycle or the next
+                    lineIdx = voltIdx[-1] * self.pulsesPerCycle
+                else:
+                    # Otherwise we are still processing the points from
+                    # the current voltage; just move on to the next point;
+                    # nothing else to do.
+                    lineIdx += 1
+
             elif t == 'CT':
-                # check if this is the first point of new curve tracer
                 if activeTag != t:
+                    # Check if this is the first point of new curve tracer.
+                    # Since the activeTag has not been changed yet if it's not
+                    # CT it means the previous block *just* ended so this point
+                    # is the first CT point
+
+                    # So append the previous IV to our list. If this is the
+                    # first CT then there will not be any previous IVs (hence
+                    # the checks for > 0 lenghts)
                     if len(currentIV["data"][0]) > 0 and len(currentIV["data"][1]) > 0:
                         self.IVs.append(currentIV)
+
+                    # Then create a new one using the last resistance of the
+                    # previous cycle (this is where the previous values of
+                    # cycleIdx and voltIdx are needed. cycleIdx should have
+                    # been updated (see * above) so that the correct resistance
+                    # is picked up from the resistance array
+                    resIdx = (voltIdx[0]+1) * self.pulsesPerCycle - 1
+                    # _log("L: %d V: [%d|%d] C: [%d|%d] IDX: %d R=%g" % \
+                    #    (lineIdx, voltIdx[0], voltIdx[-1], cycleIdx[0], cycleIdx[-1], \
+                    #    resIdx, self.all_resistances[cycleIdx[0]][resIdx]))
+                    # _log("\n", self.all_resistances.transpose())
                     currentIV = { \
-                        "R0": self.all_resistances[cycleIdx][-1], \
+                        "R0": self.all_resistances[cycleIdx[0]][resIdx], \
                         "data": [[],[]] }
 
                 current = vread/res
@@ -326,11 +400,15 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
             else:
                 pass
 
+            # don't forget to update the active subtag
             activeTag = t
 
-        # average resistances, voltages and pulses across all cycles
-        # voltages and pulses should be the same as they are identical
-        # within the same cycle
+        # average resistances, voltages and pulses across all cycles.
+        # Voltages and pulses should be the same as they are identical
+        # within the same cycle.
+        # === TODO ===
+        # Depending on how we'll use the data we might as well pull the first
+        # column and spare some CPU time. Or not allocate them at all.
         self.resistances = np.average(self.all_resistances, 0)
         self.voltages = np.average(self.all_voltages, 0)
         self.pulses = np.average(self.all_pulses, 0)
