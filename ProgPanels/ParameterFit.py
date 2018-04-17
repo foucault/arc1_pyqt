@@ -231,7 +231,7 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
 
         self.totalCycles = 1
         self.pulsesPerCycle = 500
-        self.numVoltages = 1
+        self.numVoltages = 2
 
         pointsPerCycle = self.numVoltages*self.pulsesPerCycle*2
         self.all_resistances = np.ndarray((self.totalCycles, pointsPerCycle))
