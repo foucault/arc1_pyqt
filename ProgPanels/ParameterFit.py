@@ -154,11 +154,21 @@ endmodule"""
 tag="MPF"
 g.tagDict.update({tag:"Parameter Fit*"})
 
-if os.environ.get('PFDBG', False):
+
+# If we are running with extra verbose logging then print the complete numpy
+# arrays whenever they are requested
+if int(os.environ.get('PFDBG', 0)) > 1:
     np.set_printoptions(threshold=np.nan)
 
-def _log(*args, **kwargs):
-    if bool(os.environ.get('PFDBG', False)):
+# Some diagnostic messages
+def _debug(*args, **kwargs):
+    if int(os.environ.get('PFDBG', 0)) > 0:
+        kwargs.pop('file', None)
+        print('PFDBG:', *args, file=sys.stderr, **kwargs)
+
+# Many diagnostic messages
+def _trace(*args, **kwargs):
+    if int(os.environ.get('PFDBG', 0)) > 1:
         kwargs.pop('file', None)
         print('PFDBG:', *args, file=sys.stderr, **kwargs)
 
@@ -271,6 +281,7 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
             vread = float(line[5])
 
             if t == 'INIT':
+                _debug("Processing initialisation line")
                 match = re.match('%s_INIT_C(\d+)_P(\d+)_NV(\d+)_s' % tag,\
                     str(line[3]))
                 if match:
@@ -286,6 +297,9 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
                         pointsPerCycle))
                     self.numPulsesEdit.setText(str(self.pulsesPerCycle))
                     self.numPulsesEdit.setEnabled(False)
+                    _debug("Initialisation parameters C=%d, P=%d, NV=%d" % \
+                        (self.totalCycles, self.pulsesPerCycle, \
+                        self.numVoltages))
 
             elif t == 'FF':
                 # Store the data using the indices calculated from the previous
@@ -386,10 +400,10 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
                     # been updated (see * above) so that the correct resistance
                     # is picked up from the resistance array
                     resIdx = (voltIdx[0]+1) * self.pulsesPerCycle - 1
-                    # _log("L: %d V: [%d|%d] C: [%d|%d] IDX: %d R=%g" % \
-                    #    (lineIdx, voltIdx[0], voltIdx[-1], cycleIdx[0], cycleIdx[-1], \
-                    #    resIdx, self.all_resistances[cycleIdx[0]][resIdx]))
-                    # _log("\n", self.all_resistances.transpose())
+                    _debug("CT: L: %d V: [%d|%d] C: [%d|%d] IDX: %d R=%g" % \
+                       (lineIdx, voltIdx[0], voltIdx[-1], cycleIdx[0], cycleIdx[-1], \
+                       resIdx, self.all_resistances[cycleIdx[0]][resIdx]))
+                    _trace("\n", self.all_resistances.transpose())
                     currentIV = { \
                         "R0": self.all_resistances[cycleIdx[0]][resIdx], \
                         "data": [[],[]] }
@@ -571,7 +585,7 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
             (Spos, Sneg, tp, tn, a0p, a1p, a0n, a1n, sgnPOS, sgnNEG, tw) = self.fit(posRef, negRef, numPoints)
         except RuntimeError:
             self.parameterResultLabel.setText("Convergence error!")
-            _log("Could not converge")
+            _debug("Could not converge")
         (Rinit, result) = self.response(Spos, Sneg, tp, tn, a0p, a1p, a0n, a1n, sgnPOS, sgnNEG, tw)
 
         self.modelParams["aPos"] = Spos
@@ -768,15 +782,15 @@ class ThreadWrapper(QtCore.QObject):
         self.deviceList = deviceList
         self.params = params
         self.experiments = []
-        _log("Adding FormFinder")
+        _debug("Adding FormFinder")
         self.experiments.append({'tag': 'FF', \
             'func': self._make_partial_formFinder()})
         if params['run_read']:
-            _log("Adding ReadTrain")
+            _debug("Adding ReadTrain")
             self.experiments.append({'tag': 'RET', \
                 'func': self._make_partial_readTrain()})
         if params['run_iv']:
-            _log("Adding CurveTracer")
+            _debug("Adding CurveTracer")
             self.experiments.append({'tag': 'CT', \
                 'func': self._make_partial_curveTracer()})
 
@@ -826,7 +840,7 @@ class ThreadWrapper(QtCore.QObject):
 
             for (i, voltage) in enumerate(voltages):
                 cycle = np.floor((i%(self.params["cycles"]*2))/2) + 1
-                _log("Running ParameterFit (C %d/%d) on (%d|%d) V = %g" % \
+                _debug("Running ParameterFit (C %d/%d) on (%d|%d) V = %g" % \
                     (cycle, self.params["cycles"], w, b, voltage))
                 for (idx, fdecl) in enumerate(self.experiments):
 
@@ -861,7 +875,7 @@ class ThreadWrapper(QtCore.QObject):
             pwstep=self.params['ivpw'], ctType=self.params["ivtype"])
 
     def curveTracer(self, w, b, startTag, midTag, endTag, **kwargs):
-        _log("CurveTracer on %d|%d (%s|%s|%s)" % (w, b, startTag, \
+        _debug("CurveTracer on %d|%d (%s|%s|%s)" % (w, b, startTag, \
             midTag, endTag))
         vStart = kwargs['vStart']
         vPos = kwargs['vPos']
@@ -932,7 +946,7 @@ class ThreadWrapper(QtCore.QObject):
 
     def formFinder(self, w, b, startTag, midTag, endTag, **kwargs):
 
-        _log("FormFinder on %d|%d (%s|%s|%s)" % (w, b, startTag, \
+        _debug("FormFinder on %d|%d (%s|%s|%s)" % (w, b, startTag, \
             midTag, endTag))
 
         V = kwargs['V']
@@ -1003,7 +1017,7 @@ class ThreadWrapper(QtCore.QObject):
 
     def readTrain(self, w, b, startTag, midTag, endTag, **kwargs):
 
-        _log("Read Train on %d|%d (%s|%s|%s)" % (w, b, startTag, \
+        _debug("Read Train on %d|%d (%s|%s|%s)" % (w, b, startTag, \
             midTag, endTag))
 
         numReads = kwargs['numReads']
