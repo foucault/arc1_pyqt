@@ -425,6 +425,16 @@ font-weight: bold;</string>
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="noiseTab">
+      <attribute name="title">
+       <string>Noise</string>
+      </attribute>
+      <layout class="QGridLayout" name="gridLayout_8">
+       <item row="0" column="0">
+        <widget class="PlotWidget" name="noisePlotWidget" native="true"/>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
   </layout>
