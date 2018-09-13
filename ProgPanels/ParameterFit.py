@@ -10,6 +10,7 @@
 
 from __future__ import print_function
 from PyQt4 import QtGui, QtCore
+from itertools import cycle
 from functools import partial
 import sys
 import os
@@ -153,6 +154,13 @@ endmodule"""
 
 tag="MPF"
 g.tagDict.update({tag:"Parameter Fit*"})
+
+PENS = [ \
+    pyqtgraph.mkPen({'color': 'F00', 'width': 1}), \
+    pyqtgraph.mkPen({'color': '0F0', 'width': 1}), \
+    pyqtgraph.mkPen({'color': '00F', 'width': 1}), \
+]
+
 
 
 # If we are running with extra verbose logging then print the complete numpy
@@ -427,8 +435,10 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         self.voltages = np.average(self.all_voltages, 0)
         self.pulses = np.average(self.all_pulses, 0)
 
-        self.resistancePlot = self.responsePlotWidget.plot(self.resistances,\
-            clear=True, pen=pyqtgraph.mkPen({'color': 'F00', 'width': 1}))
+        colorCycler = cycle(PENS)
+
+        for data in self.all_resistances:
+            self.responsePlotWidget.plot(data, pen=colorCycler.next(), clear=False)
 
         self.fitPlot = None
 
@@ -602,7 +612,7 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         self.modelData = result
 
         if self.fitPlot is None:
-            self.fitPlot = self.responsePlotWidget.plot(self.modelData,pen=pyqtgraph.mkPen({'color': '00F', 'width': 1}))
+            self.fitPlot = self.responsePlotWidget.plot(self.modelData,pen=pyqtgraph.mkPen({'color': 'F0F', 'width': 2}))
         else:
             self.fitPlot.setData(self.modelData)
 
