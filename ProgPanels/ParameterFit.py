@@ -20,6 +20,7 @@ import scipy.stats as stat
 import scipy.version
 from scipy.optimize import curve_fit, leastsq, least_squares
 import pyqtgraph
+from pyqtgraph.widgets.MatplotlibWidget import MatplotlibWidget
 import copy
 import re
 
@@ -236,6 +237,10 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
     def __init__(self, w, b, raw_data, parent=None):
         super(FitDialog, self).__init__(parent=parent)
         self.setupUi(self)
+
+        self.noisePlotWidget = MatplotlibWidget()
+        self.noiseTab.layout().addWidget(self.noisePlotWidget)
+
         self.setWindowTitle("Parameter fit for W=%d | B=%d" % (w, b))
         self.setWindowIcon(QtGui.QIcon(os.getcwd()+'/Graphics/'+'icon3.png'))
 
@@ -247,14 +252,16 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         self.fitMechanismModelButton.clicked.connect(self.fitMechanismClicked)
         self.mechanismModelCombo.currentIndexChanged.connect(self.mechanismModelComboIndexChanged)
 
-        self.totalCycles = 1
-        self.pulsesPerCycle = 500
-        self.numVoltages = 2
+        self.totalCycles = 1 # total cycles
+        self.pulsesPerCycle = 500 # programming pulses per cycle
+        self.numVoltages = 2 # number of different voltage pairs
+        self.numReads = 50 # reads per retention cycle
 
         pointsPerCycle = self.numVoltages*self.pulsesPerCycle
         self.all_resistances = np.ndarray((self.totalCycles, pointsPerCycle))
         self.all_voltages = np.ndarray((self.totalCycles, pointsPerCycle))
         self.all_pulses = np.ndarray((self.totalCycles, pointsPerCycle))
+        self.all_reads = np.ndarray((self.totalCycles, self.numReads))
         self.modelData[:] = []
         self.modelParams = {}
         self.IVs = []
@@ -278,6 +285,11 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         # no need to keep previous line index; this is only useful for FF
         lineIdx = 0
 
+        # line index for the retention pulses; we need this because the
+        # length of the retention arrays will be different from the
+        # programming pulses
+        readLineIdx = 0
+
         for line in raw_data:
 
             res = float(line[0])
@@ -290,24 +302,29 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
 
             if t == 'INIT':
                 _debug("Processing initialisation line")
-                match = re.match('%s_INIT_C(\d+)_P(\d+)_NV(\d+)_s' % tag,\
+                match = re.match('%s_INIT_C(\d+)_P(\d+)_NV(\d+)_R(\d+)_s' % tag,\
+                #match = re.match('%s_INIT_C(\d+)_P(\d+)_NV(\d+)_s' % tag,\
                     str(line[3]))
                 if match:
                     self.totalCycles = int(match.group(1))
                     self.pulsesPerCycle = int(match.group(2))
                     self.numVoltages = int(match.group(3))*2
+                    self.numReads = int(match.group(4))
                     pointsPerCycle = self.numVoltages*self.pulsesPerCycle
+                    readsPerCycle = self.numVoltages*self.numReads
                     self.all_resistances = np.ndarray((self.totalCycles, \
                         pointsPerCycle))
                     self.all_voltages = np.ndarray((self.totalCycles, \
                         pointsPerCycle))
                     self.all_pulses = np.ndarray((self.totalCycles, \
                         pointsPerCycle))
+                    self.all_reads = np.ndarray((self.totalCycles, \
+                        readsPerCycle))
                     self.numPulsesEdit.setText(str(self.pulsesPerCycle))
                     self.numPulsesEdit.setEnabled(False)
-                    _debug("Initialisation parameters C=%d, P=%d, NV=%d" % \
+                    _debug("Initialisation parameters C=%d, P=%d, NV=%d, NR=%d" % \
                         (self.totalCycles, self.pulsesPerCycle, \
-                        self.numVoltages))
+                        self.numVoltages, self.numReads))
 
             elif t == 'FF':
                 # Store the data using the indices calculated from the previous
@@ -334,7 +351,7 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
                 # array.
 
                 # First, check the voltage the next line is in (hence the +1)
-                multiple = np.floor((lineIdx+1)/self.pulsesPerCycle)
+                multiple = int(np.floor((lineIdx+1)/self.pulsesPerCycle))
 
                 # If it is an integer multiple of pulsesPerCycle (which means
                 # that all points of the current voltage have been processed)
@@ -389,6 +406,29 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
                     # nothing else to do.
                     lineIdx += 1
 
+            elif t == 'RET':
+                multiple = int(np.floor((readLineIdx+1)/self.numReads))
+
+                self.all_reads[cycleIdx[-1]][readLineIdx] = res
+                # print(multiple, (readLineIdx+1) % self.numReads, cycleIdx)
+                if (readLineIdx+1) % self.numReads == 0 and multiple > 0:
+                    if multiple % 2 != 0:
+                        # voltage ended; but cycle did not; just keep going
+                        # print("Voltage ended; cycle did not", voltIdx, readLineIdx, cycleIdx)
+                        readLineIdx += 1
+                    else:
+                        # voltage ended; cycle ended
+                        readLineIdx = voltIdx[-1] * self.numReads
+
+                    # update the value
+                    # self.all_reads[cycleIdx[0]][readLineIdx] = pw
+                else:
+                    # also update the value but additionally
+                    # increase the readLineIdx
+                    # self.all_reads[cycleIdx[0]][readLineIdx] = pw
+                    readLineIdx += 1
+
+
             elif t == 'CT':
                 if activeTag != t:
                     # Check if this is the first point of new curve tracer.
@@ -419,11 +459,14 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
                 current = vread/res
                 currentIV["data"][0].append(vread)
                 currentIV["data"][1].append(current)
+
             else:
+                # Unknown tag ?
                 pass
 
             # don't forget to update the active subtag
             activeTag = t
+
 
         # average resistances, voltages and pulses across all cycles.
         # Voltages and pulses should be the same as they are identical
@@ -475,6 +518,31 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
             idx = self.tabWidget.indexOf(mechanismTab)
             if idx > 0:
                 self.tabWidget.setTabEnabled(idx, False)
+
+        self.populateNoiseWidget()
+
+    def populateNoiseWidget(self):
+        (unique_v, unique_vidx) = np.unique(self.all_voltages, return_index=True)
+
+        # order voltages by increasing amplitude; this is how they appear in the
+        # original data structure
+        voltages = unique_v[np.argsort(unique_vidx)]
+        bias_indices = np.arange(0, self.numVoltages*self.pulsesPerCycle, self.pulsesPerCycle)
+        read_indices = np.arange(0, self.numVoltages*self.numReads, self.numReads)
+
+        pos_biases = np.ndarray((len(voltages)/2, self.totalCycles * self.pulsesPerCycle))
+        neg_biases = np.ndarray((len(voltages)/2, self.totalCycles * self.pulsesPerCycle))
+        pos_reads = np.ndarray((len(voltages)/2, self.totalCycles * self.numReads))
+        neg_reads = np.ndarray((len(voltages)/2, self.totalCycles * self.numReads))
+
+        for c in self.totalCycles:
+            # assign data to the respective arrays
+            # please note that the indices correspond to alternating
+            # positive and negative voltages, for example
+            # [0, 200, 400, 600, 800, 1000]
+            #  +    -    +    -    +     -
+            # The number of elements in the index arrays is guaranteed
+            # to be even
 
     def exportClicked(self):
         saveCb = partial(f.writeDelimitedData, self.modelData)
@@ -838,12 +906,23 @@ class ThreadWrapper(QtCore.QObject):
             self.highlight.emit(w, b)
 
             # This is the initialisation tag constructed as such
-            # MPF_INIT_Cx_Py_NVz_s where
+            # MPF_INIT_Cx_Py_NVz_Ra_s where
             # x: Number of cycles
             # y: Number of pulses per cycle
             # z: Number of different voltage pairs
-            initTag = "%s_INIT_C%d_P%d_NV%d_s" % \
-                (tag, self.params["cycles"], self.params["pulses"], numVoltages)
+            # a: Number of reads
+
+            if not self.params["run_read"]:
+                numReads = 0
+            else:
+                numReads = self.params["num_reads"]
+
+            initTag = "%s_INIT_C%d_P%d_NV%d_R%d_s" % \
+                (tag, self.params["cycles"], self.params["pulses"], \
+                    numVoltages, numReads)
+
+            # initTag = "%s_INIT_C%d_P%d_NV%d_s" % \
+            #     (tag, self.params["cycles"], self.params["pulses"], numVoltages)
             initVal = self._readSingle(w, b)
             self.sendData.emit(w, b, initVal, g.Vread, 0, initTag)
             self.displayData.emit()

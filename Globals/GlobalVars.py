@@ -9,6 +9,9 @@
 
 from PyQt4 import QtCore
 from PyQt4 import QtGui
+
+import matplotlib
+matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as mpl
 import numpy as np
 
