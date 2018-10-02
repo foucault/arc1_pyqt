@@ -21,6 +21,7 @@ import scipy.version
 from scipy.optimize import curve_fit, leastsq, least_squares
 import pyqtgraph
 from pyqtgraph.widgets.MatplotlibWidget import MatplotlibWidget
+from mpl_toolkits.mplot3d import Axes3D
 import copy
 import re
 
@@ -187,6 +188,47 @@ def _curve_fit(func, x, y, **kwargs):
         if 'method' in kwargs.keys():
             kwargs.pop('method')
     return curve_fit(func, x, y, **kwargs)
+
+def _element_rotate(matrix, deg):
+    # Rotate a matrix by specified degrees
+
+    theta = np.radians(deg)
+
+    c, s = np.cos(theta), np.sin(theta)
+
+    R = np.array(((c, -s), (s, c)))
+
+    return np.dot(matrix, R.T)
+
+def _fit_plane(data, voltages, offset=(0.0, 0.0), clip=None):
+    """Fits a plane to given data optionally offsetting them"""
+
+    A = np.c_[data[0], data[2], np.ones(data.shape[1])]
+    C, _, _, _ = scipy.linalg.lstsq(A, data[1])
+
+    X, Y = np.meshgrid(np.arange(min(data[0]), max(data[0])), voltages)
+
+    Z = C[0]*X + C[1]*Y + C[2] - (offset[0]*X + 0.0*Y + offset[1])
+
+    # clip to 0.0
+
+    if clip is not None:
+        for (idx, point) in np.ndenumerate(Z):
+            if Z[idx] < clip:
+                Z[idx] = clip
+
+    return (X, Y, Z)
+
+def _DR_gauss_fit(segment):
+    R = segment.T[0]
+    DR = segment.T[1]
+    mu = np.mean(DR)
+    sigma = np.std(DR)
+    x = np.mean(R)
+
+    # add x' spread
+
+    return np.array([x, mu, sigma])
 
 
 class ModelWidget(QtGui.QWidget):
@@ -414,18 +456,11 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
                 if (readLineIdx+1) % self.numReads == 0 and multiple > 0:
                     if multiple % 2 != 0:
                         # voltage ended; but cycle did not; just keep going
-                        # print("Voltage ended; cycle did not", voltIdx, readLineIdx, cycleIdx)
                         readLineIdx += 1
                     else:
                         # voltage ended; cycle ended
                         readLineIdx = voltIdx[-1] * self.numReads
-
-                    # update the value
-                    # self.all_reads[cycleIdx[0]][readLineIdx] = pw
                 else:
-                    # also update the value but additionally
-                    # increase the readLineIdx
-                    # self.all_reads[cycleIdx[0]][readLineIdx] = pw
                     readLineIdx += 1
 
 
@@ -521,7 +556,12 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
 
         self.populateNoiseWidget()
 
-    def populateNoiseWidget(self):
+    def _splitData(self):
+        # up to this point all data are lumped into two huge tables `all_resistances` and
+        # `all_reads`. This is not particularly useful as there is separate processing for
+        # positive and negative brachnes. This function splits the data to separate
+        # branches
+
         (unique_v, unique_vidx) = np.unique(self.all_voltages, return_index=True)
 
         # order voltages by increasing amplitude; this is how they appear in the
@@ -532,10 +572,11 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
 
         pos_biases = np.ndarray((len(voltages)/2, self.totalCycles * self.pulsesPerCycle))
         neg_biases = np.ndarray((len(voltages)/2, self.totalCycles * self.pulsesPerCycle))
-        pos_reads = np.ndarray((len(voltages)/2, self.totalCycles * self.numReads))
-        neg_reads = np.ndarray((len(voltages)/2, self.totalCycles * self.numReads))
 
-        for c in self.totalCycles:
+        # Reads are lumped together; no need to separate them
+        reads = np.ndarray((len(voltages), self.totalCycles * self.numReads))
+
+        for c in range(self.totalCycles):
             # assign data to the respective arrays
             # please note that the indices correspond to alternating
             # positive and negative voltages, for example
@@ -543,6 +584,97 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
             #  +    -    +    -    +     -
             # The number of elements in the index arrays is guaranteed
             # to be even
+
+            # Positive values first
+            # Programming
+            for (i, bi) in enumerate(bias_indices[::2]):
+                dst_from = c*self.pulsesPerCycle
+                dst_to = (c+1)*self.pulsesPerCycle
+                src_from = bi
+                src_to = src_from + self.pulsesPerCycle
+                pos_biases[i, dst_from:dst_to] =\
+                        self.all_resistances[c, src_from:src_to]
+
+            # Read
+            for (i, bi) in enumerate(read_indices[::2]):
+                dst_from = c*self.numReads
+                dst_to = (c+1)*self.numReads
+                src_from = bi
+                src_to = src_from + self.numReads
+                reads[i, dst_from:dst_to] =\
+                        self.all_reads[c, src_from:src_to]
+
+            # Then negatives
+            # Programming
+            for (i, bi) in enumerate(bias_indices[1::2]):
+                dst_from = c*self.pulsesPerCycle
+                dst_to = (c+1)*self.pulsesPerCycle
+                src_from = bi
+                src_to = src_from + self.pulsesPerCycle
+                neg_biases[i, dst_from:dst_to] =\
+                        self.all_resistances[c, src_from:src_to]
+
+            # Read
+            for (i, bi) in enumerate(read_indices[1::2]):
+                dst_from = c*self.numReads
+                dst_to = (c+1)*self.numReads
+                src_from = bi
+                src_to = src_from + self.numReads
+                reads[i+len(voltages)/2, dst_from:dst_to] =\
+                        self.all_reads[c, src_from:src_to]
+
+        return (pos_biases, neg_biases, \
+            reads.reshape((1, self.totalCycles * len(voltages)*self.numReads)))
+
+    def _processNoiseData(self, raw, batch):
+        # raw: full dataset with reads
+        # batch: number of pulses per batch
+
+        WIN = 1
+
+        # all the rotated data for each volume
+        concatenated = []
+
+        for vlt in range(raw.shape[0]):
+            rotated_sets = []
+            for c in range(self.totalCycles):
+                # iterate all voltages in the raw data array
+                R = raw[vlt, c*batch:c*batch-2]
+                DR = np.diff(raw[vlt, c*batch:c*batch-1])
+
+                # column stacked R, DR
+                C = np.column_stack((R, DR))
+                # rotated R, DR array
+                rC = _element_rotate(C, -45)
+                rotated_sets.append(rC)
+
+            alldata = np.concatenate(rotated_sets, axis=0)
+            rotated = alldata[np.argsort(alldata[:,0])]
+            processed = np.empty((rotated.shape[0]-2*WIN, 3))
+
+            for index, _ in np.ndenumerate(rotated[WIN:rotated.shape[0]-WIN]):
+                idx = index[0] + WIN
+                segment = rotated[idx-WIN:idx+WIN+1]
+                processed[index[0]] = _DR_gauss_fit(segment)
+
+            final = _element_rotate(processed[:,[0,1]], 45)
+
+            concatenated.append(np.column_stack((final.T[0], processed.T[2])))
+
+        return concatenated
+
+    def populateNoiseWidget(self):
+        (pos_biases, neg_biases, reads) = self._splitData()
+        bias_proc_pos = self._processNoiseData(pos_biases, self.pulsesPerCycle)
+        bias_proc_neg = self._processNoiseData(neg_biases, self.pulsesPerCycle)
+        read_proc = self._processNoiseData(reads, self.numReads)[0]
+
+        read_coeffs = np.polyfit(read_proc[0], read_proc[1], 1)
+        unique_v = np.unique(self.all_voltages)
+
+        rX, rY = np.meshgrid(np.linspace(min(reads[0]), max(reads[0])), \
+            np.linspace(min(unique_v), max(unique_v)))
+        rZ = read_coeffs[0]*rX + 0.0*rY + read_coeffs[1]
 
     def exportClicked(self):
         saveCb = partial(f.writeDelimitedData, self.modelData)
