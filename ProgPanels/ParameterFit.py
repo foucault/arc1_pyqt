@@ -623,17 +623,30 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
                 reads[i+len(voltages)/2, dst_from:dst_to] =\
                         self.all_reads[c, src_from:src_to]
 
-        return (pos_biases, neg_biases, \
+        # Returns this weird multi-tuple
+        # (
+        #   (positive voltages, resistances corresponding to said voltages),
+        #   (negative voltages, resistances corresponding to said voltages),
+        #   all reads lumped together
+        # )
+
+        return ((voltages[voltages > 0], pos_biases), \
+                (voltages[voltages < 0], neg_biases), \
             reads.reshape((1, self.totalCycles * len(voltages)*self.numReads)))
 
-    def _processNoiseData(self, raw, batch):
+    def _processNoiseData(self, raw, batch, voltages=None):
         # raw: full dataset with reads
         # batch: number of pulses per batch
+        # voltages: actual biasing voltages during programming, None otherwise
 
         WIN = 1
 
-        # all the rotated data for each volume
-        concatenated = []
+        # number of points per voltage
+        #increment = raw.shape[1] - 2*self.totalCycles
+        increment = raw.shape[1] - 2*2
+
+        # all the rotated data for each voltage + the actual voltage
+        concatenated = np.empty((raw.shape[0]*increment, 3))
 
         for vlt in range(raw.shape[0]):
             rotated_sets = []
@@ -659,15 +672,25 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
 
             final = _element_rotate(processed[:,[0,1]], 45)
 
-            concatenated.append(np.column_stack((final.T[0], processed.T[2])))
+            # add the calculated values to the correct positions on the
+            # big return table
+            concatenated[vlt*increment:(vlt+1)*increment, 0] = final.T[0]
+            concatenated[vlt*increment:(vlt+1)*increment, 1] = processed.T[2]
 
-        return concatenated
+            # for programming pulses add the programming voltages
+            # otherwise don't touch it (leave it as initialised)
+            if voltages is not None:
+                concatenated[vlt*increment:(vlt+1)*increment, 2] = voltages[vlt]
+
+        return concatenated.T
 
     def populateNoiseWidget(self):
-        (pos_biases, neg_biases, reads) = self._splitData()
-        bias_proc_pos = self._processNoiseData(pos_biases, self.pulsesPerCycle)
-        bias_proc_neg = self._processNoiseData(neg_biases, self.pulsesPerCycle)
-        read_proc = self._processNoiseData(reads, self.numReads)[0]
+        ((pos_voltages, pos_biases), (neg_voltages, neg_biases), reads) = \
+                self._splitData()
+        bias_proc_pos = self._processNoiseData(pos_biases, self.pulsesPerCycle, pos_voltages)
+        bias_proc_neg = self._processNoiseData(neg_biases, self.pulsesPerCycle, neg_voltages)
+
+        read_proc = self._processNoiseData(reads, self.numReads)
 
         read_coeffs = np.polyfit(read_proc[0], read_proc[1], 1)
         unique_v = np.unique(self.all_voltages)
@@ -675,6 +698,16 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
         rX, rY = np.meshgrid(np.linspace(min(reads[0]), max(reads[0])), \
             np.linspace(min(unique_v), max(unique_v)))
         rZ = read_coeffs[0]*rX + 0.0*rY + read_coeffs[1]
+
+        plane_pos = _fit_plane(bias_proc_pos, np.arange(0.1, max(pos_voltages), 0.1),\
+                read_coeffs, clip=0.0)
+        plane_neg = _fit_plane(bias_proc_neg, np.arange(min(neg_voltages), 0.1, 0.1),\
+                read_coeffs, clip=0.0)
+
+        figure = self.noisePlotWidget.getFigure()
+        axis = figure.gca(projection='3d')
+        axis.plot_surface(*plane_pos)
+        axis.plot_surface(*plane_neg)
 
     def exportClicked(self):
         saveCb = partial(f.writeDelimitedData, self.modelData)
