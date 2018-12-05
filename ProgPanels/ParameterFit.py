@@ -226,10 +226,8 @@ def _DR_gauss_fit(segment):
     R = segment.T[0]
     DR = segment.T[1]
     mu = np.mean(DR)
-    sigma = np.std(DR)
+    sigma = np.std(DR) * 1/np.sqrt(2) * 1/0.86
     x = np.mean(R)
-
-    # add x' spread
 
     return np.array([x, mu, sigma])
 
