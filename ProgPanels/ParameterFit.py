@@ -217,6 +217,9 @@ def _fit_plane(data, voltages, offset=(0.0, 0.0), clip=None):
             if Z[idx] < clip:
                 Z[idx] = clip
 
+    _debug("C:", C)
+    _debug("offset:", offset)
+
     return (X, Y, Z)
 
 def _DR_gauss_fit(segment):
