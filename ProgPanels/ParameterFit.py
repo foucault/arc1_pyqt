@@ -1179,8 +1179,8 @@ class ThreadWrapper(QtCore.QObject):
         while(not end):
             curValues = list(f.getFloats(3))
 
-            if curValues[0] > 10e9:
-                continue
+            if curValues[0] == np.inf:
+                curValues[0] = 10e9
 
             if (int(curValues[0]) == 0) and (int(curValues[1]) == 0) and (int(curValues[2]) == 0):
                 end = True
@@ -1252,6 +1252,9 @@ class ThreadWrapper(QtCore.QObject):
             if (curValues[2] < 99e-9) and (curValues[0] > 0.0):
                 # print("spurious read")
                 continue
+
+            if curValues[0] == np.inf:
+                curValues[0] = 10e9 # above the operating range of ArC ONE
 
             if (int(curValues[0]) == 0) and (int(curValues[1]) == 0) and (int(curValues[2]) == 0):
                 end = True
