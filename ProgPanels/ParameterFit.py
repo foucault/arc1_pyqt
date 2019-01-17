@@ -555,7 +555,17 @@ class FitDialog(Ui_FitDialogParent, QtGui.QDialog):
             if idx > 0:
                 self.tabWidget.setTabEnabled(idx, False)
 
-        self.populateNoiseWidget()
+        try:
+            self.populateNoiseWidget()
+        except MemoryError:
+            self.noisePlotWidget.setParent(None)
+            self.noiseTab.layout().removeWidget(self.noisePlotWidget)
+            errorLabel = \
+                QtGui.QLabel("Noise model calcuation did not converge"
+                    " or memory exhausted")
+            errorLabel.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+            errorLabel.setStyleSheet("font-weight: bold; color: red; font-size: 14pt");
+            self.noiseTab.layout().addWidget(errorLabel)
 
     def _splitData(self):
         # up to this point all data are lumped into two huge tables `all_resistances` and
