@@ -11,7 +11,10 @@ from ._antennae import CBAntenna, DisplayUpdateAntenna, HistoryTreeAntenna
 from ._antennae import InterfaceAntenna, SAantenna, HoverAntenna, AddressAntenna
 from PyQt5 import QtGui, QtWidgets, QtCore
 import numpy as np
-import collections
+try:
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
 import struct
 from ..VirtualArC import VirtualArC
 
@@ -52,7 +55,7 @@ def writeDelimitedData(data, dest, delimiter="\t"):
     try:
         f = open(dest, 'w')
         for line in data:
-            if isinstance(line, str) or (not isinstance(line, collections.Iterable)):
+            if isinstance(line, str) or (not isinstance(line, Iterable)):
                 line = [line]
             text = delimiter.join("{0:.5g}".format(x) for x in line)
             f.write(text+"\n")
